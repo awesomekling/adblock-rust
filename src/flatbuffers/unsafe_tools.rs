@@ -1,5 +1,7 @@
 //! Unsafe utility functions for working with flatbuffers and other low-level operations.
 
+use std::borrow::Cow;
+
 use crate::filters::flatbuffer_generated::fb;
 
 // Minimum alignment for the beginning of the flatbuffer data.
@@ -42,7 +44,7 @@ pub fn fb_vector_to_slice<T>(vector: flatbuffers::Vector<'_, T>) -> &[T] {
 //    This is necessary for fb_vector_to_slice.
 pub(crate) struct VerifiedFlatbufferMemory {
     // The buffer containing the flatbuffer data.
-    raw_data: Vec<u8>,
+    raw_data: Cow<'static, [u8]>,
 
     // The offset of the data in the buffer.
     // Must be aligned to MIN_ALIGNMENT bytes.
@@ -59,6 +61,16 @@ impl VerifiedFlatbufferMemory {
         let _ = fb::root_as_engine(memory.data())?;
 
         Ok(memory)
+    }
+
+    // Uses `data` where it is, without copying it or running the FlatBuffer verifier.
+    // The caller must already know `data` satisfies invariant 1.
+    pub(crate) fn from_borrowed_unchecked(data: &'static [u8]) -> Self {
+        assert!((data.as_ptr() as usize).is_multiple_of(MIN_ALIGNMENT));
+        Self {
+            raw_data: Cow::Borrowed(data),
+            start: 0,
+        }
     }
 
     // Creates a new VerifiedFlatbufferMemory from a builder.
@@ -87,7 +99,7 @@ impl VerifiedFlatbufferMemory {
         assert!((vec.as_ptr() as usize + start).is_multiple_of(MIN_ALIGNMENT));
 
         let memory = Self {
-            raw_data: vec,
+            raw_data: Cow::Owned(vec),
             start,
         };
         assert!((memory.data().as_ptr() as usize).is_multiple_of(MIN_ALIGNMENT));

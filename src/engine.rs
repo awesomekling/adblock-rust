@@ -238,6 +238,10 @@ impl Engine {
     ) -> Self {
         let source_info_vec = FlatSerialize::serialize(source_info_vec, &mut builder);
         let memory = builder.finish(network_rules, cosmetic_rules, source_info_vec, debug);
+        Self::from_memory(memory)
+    }
+
+    fn from_memory(memory: VerifiedFlatbufferMemory) -> Self {
         let filter_data_context = FilterDataContext::new(memory);
         Self {
             blocker: Blocker::from_context(FilterDataContextRef::clone(&filter_data_context)),
@@ -463,6 +467,22 @@ impl Engine {
             &self.filter_data_context,
         ));
         Ok(())
+    }
+
+    /// The FlatBuffer behind this `Engine`, for [`Engine::new_with_borrowed_flatbuffer`].
+    pub fn flatbuffer_data(&self) -> &[u8] {
+        self.filter_data_context.memory.data()
+    }
+
+    /// Creates an `Engine` that reads a FlatBuffer in place instead of copying it, so that several
+    /// processes can share one read-only mapping.
+    ///
+    /// # Safety
+    ///
+    /// `data` must come from [`Engine::flatbuffer_data`] in this version of the crate, must start
+    /// on an 8-byte boundary, and must never be written to.
+    pub unsafe fn new_with_borrowed_flatbuffer(data: &'static [u8]) -> Self {
+        Self::from_memory(VerifiedFlatbufferMemory::from_borrowed_unchecked(data))
     }
 }
 

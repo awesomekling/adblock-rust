@@ -307,6 +307,22 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_flatbuffer_is_read_in_place() {
+        let original = Engine::new_with_list_text("||example.com^");
+        let bytes = original.flatbuffer_data();
+        let words = Box::leak(vec![0u64; bytes.len().div_ceil(8)].into_boxed_slice());
+        let data =
+            unsafe { std::slice::from_raw_parts_mut(words.as_mut_ptr().cast(), bytes.len()) };
+        data.copy_from_slice(bytes);
+
+        let engine = unsafe { Engine::new_with_borrowed_flatbuffer(data) };
+        assert_eq!(engine.flatbuffer_data().as_ptr(), data.as_ptr());
+
+        let request = Request::new("https://example.com/ad.js", "", "script", "").unwrap();
+        assert!(engine.check_network_request(&request).should_block());
+    }
+
+    #[test]
     fn deserialize_rejects_invalid_flatbuffer() {
         let mut garbage = crate::data_format::serialize_dat_file(b"not a flatbuffer");
         garbage[crate::data_format::HEADER_PREFIX_LENGTH - 1] ^= 1;
